@@ -1,0 +1,24 @@
+# Node 项目
+node_modules/
+
+# Java Maven/Gradle 编译输出
+target/
+
+# IDEA / Eclipse
+.idea/
+*.iml
+.project
+.classpath
+
+# 日志
+logs/
+*.log
+
+# 打包输出
+dist/
+build/
+out/
+
+# 系统文件
+.DS_Store
+Thumbs.db

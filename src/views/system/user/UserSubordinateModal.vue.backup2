@@ -1,0 +1,518 @@
+<template>
+  <a-modal
+    v-model:open="open"
+    title="用户下级信息"
+    :width="isFullscreen ? '100vw' : '800px'"
+    :style="isFullscreen ? { top: 0, paddingBottom: 0, maxWidth: '100vw' } : {}"
+    :bodyStyle="isFullscreen ? { height: 'calc(100vh - 55px)', overflow: 'auto' } : {}"
+    :footer="null"
+    @cancel="handleCancel"
+  >
+    <!-- 全屏按钮放在 closeIcon 插槽中 -->
+    <template #closeIcon>
+      <div class="modal-close-buttons">
+        <a-button 
+          type="text" 
+          class="modal-action-button"
+          @click.stop="toggleFullscreen"
+          :title="isFullscreen ? '退出全屏' : '全屏显示'"
+        >
+          <template #icon>
+            <FullscreenOutlined v-if="!isFullscreen" />
+            <FullscreenExitOutlined v-else />
+          </template>
+        </a-button>
+        <a-button 
+          type="text" 
+          class="modal-action-button"
+          @click.stop="handleCancel"
+          title="关闭"
+        >
+          <template #icon>
+            <CloseOutlined />
+          </template>
+        </a-button>
+      </div>
+    </template>
+    
+    <div class="user-info-container">
+      <a-descriptions :column="isFullscreen ? 3 : 2" bordered>
+        <a-descriptions-item label="用户账号" :span="isFullscreen ? 3 : 2">
+          {{ userInfo.username || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="用户姓名">
+          {{ userInfo.realname || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="性别">
+          {{ getSexText(userInfo.sex) }}
+        </a-descriptions-item>
+        <a-descriptions-item label="手机号">
+          {{ userInfo.phone || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="邮箱">
+          {{ userInfo.email || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="所属部门" :span="isFullscreen ? 3 : 2">
+          {{ userInfo.orgCodeTxt || '-' }}
+        </a-descriptions-item>
+        <a-descriptions-item label="总余额">
+          {{ userInfo.totalCarNum || 0 }}
+        </a-descriptions-item>
+        <a-descriptions-item label="已使用">
+          {{ userInfo.usedCarNum || 0 }}
+        </a-descriptions-item>
+        <a-descriptions-item label="历史成交车数">
+          {{ subordinateData?.num || 0 }}
+        </a-descriptions-item>
+        <a-descriptions-item label="用户状态">
+          {{ getStatusText(userInfo.status) }}
+        </a-descriptions-item>
+        <a-descriptions-item label="创建时间" :span="isFullscreen ? 3 : 2">
+          {{ userInfo.createTime || '-' }}
+        </a-descriptions-item>
+      </a-descriptions>
+      
+      <!-- 角色信息 -->
+      <div class="role-section" v-if="userInfo.roles && userInfo.roles.length > 0">
+        <h4>角色信息</h4>
+        <a-tag v-for="role in userInfo.roles" :key="role.id" color="blue">
+          {{ role.roleName }}
+        </a-tag>
+      </div>
+      
+      <!-- 下级用户列表 -->
+      <div class="subordinate-section">
+        <h4 style="margin-left: 12px;">下级用户</h4>
+        <div v-if="subordinateData && subordinateData.children && subordinateData.children.length > 0">
+          <div v-for="(subordinate, index) in subordinateData.children" :key="subordinate.userId" class="subordinate-item">
+            <a-card :bordered="false" class="subordinate-card">
+              <div class="subordinate-info">
+                <div class="user-basic-info">
+                  <a-avatar :size="40" style="background-color: #1890ff;">
+                    {{ subordinate.realname ? subordinate.realname.charAt(0) : '用' }}
+                  </a-avatar>
+                  <div class="user-details">
+                    <div class="user-name">{{ subordinate.realname || '未知用户' }}</div>
+                    <div class="user-id">ID: {{ subordinate.userId }}</div>
+                  </div>
+                </div>
+                <div class="user-stats">
+                  <a-statistic title="历史成交车数" :value="subordinate.num" />
+                </div>
+                <div class="user-actions" v-if="subordinate.children && subordinate.children.length > 0">
+                  <a-button 
+                    type="primary" 
+                    size="small" 
+                    @click="toggleSubordinate(subordinate.userId)"
+                  >
+                    {{ expandedUsers.has(subordinate.userId) ? '收起下级' : '查看下级' }} ({{ subordinate.children.length }})
+                  </a-button>
+                </div>
+              </div>
+              
+              <!-- 下级用户展开区域 -->
+              <div 
+                v-if="subordinate.children && subordinate.children.length > 0 && expandedUsers.has(subordinate.userId)" 
+                class="subordinate-children"
+              >
+                <div 
+                  v-for="child in subordinate.children" 
+                  :key="child.userId" 
+                  class="subordinate-child-item"
+                >
+                  <a-card :bordered="false" class="subordinate-child-card">
+                    <div class="subordinate-info">
+                      <div class="user-basic-info">
+                        <a-avatar :size="32" style="background-color: #52c41a;">
+                          {{ child.realname ? child.realname.charAt(0) : '用' }}
+                        </a-avatar>
+                        <div class="user-details">
+                          <div class="user-name">{{ child.realname || '未知用户' }}</div>
+                        </div>
+                      </div>
+                      <div class="user-stats">
+                        <a-statistic title="历史成交车数" :value="child.num" />
+                      </div>
+                      <div class="user-actions" v-if="child.children && child.children.length > 0">
+                        <a-button 
+                          type="primary" 
+                          size="small" 
+                          @click="toggleSubordinate(child.userId)"
+                        >
+                          {{ expandedUsers.has(child.userId) ? '收起下级' : '查看下级' }} ({{ child.children.length }})
+                        </a-button>
+                      </div>
+                    </div>
+                    
+                    <!-- 三级下级用户展开区域 -->
+                    <div 
+                      v-if="child.children && child.children.length > 0 && expandedUsers.has(child.userId)" 
+                      class="subordinate-children"
+                    >
+                      <div 
+                        v-for="grandChild in child.children" 
+                        :key="grandChild.userId" 
+                        class="subordinate-child-item"
+                      >
+                        <a-card :bordered="false" class="subordinate-child-card">
+                          <div class="subordinate-info">
+                            <div class="user-basic-info">
+                              <a-avatar :size="28" style="background-color: #fa8c16;">
+                                {{ grandChild.realname ? grandChild.realname.charAt(0) : '用' }}
+                              </a-avatar>
+                              <div class="user-details">
+                                <div class="user-name">{{ grandChild.realname || '未知用户' }}</div>
+                              </div>
+                            </div>
+                            <div class="user-stats">
+                              <a-statistic title="历史成交车数" :value="grandChild.num" />
+                            </div>
+                          </div>
+                        </a-card>
+                      </div>
+                    </div>
+                  </a-card>
+                </div>
+              </div>
+            </a-card>
+          </div>
+        </div>
+        <a-empty v-else description="暂无下级用户信息" />
+      </div>
+    </div>
+  </a-modal>
+</template>
+
+<script lang="ts" setup>
+import { ref, watch } from 'vue';
+import { FullscreenOutlined, FullscreenExitOutlined, CloseOutlined } from '@ant-design/icons-vue';
+import { getByUserSubordinate, list } from './user.api';
+
+// 下级用户数据结构
+interface SubordinateUser {
+  userId: string;
+  num: number;
+  realname?: string;
+  children: SubordinateUser[];
+}
+
+interface UserInfo {
+  id?: string;
+  username?: string;
+  realname?: string;
+  sex?: number;
+  phone?: string;
+  email?: string;
+  orgCodeTxt?: string;
+  totalCarNum?: number;
+  usedCarNum?: number;
+  status?: number;
+  createTime?: string;
+  lastLoginTime?: string;
+  roles?: Array<{
+    id: string;
+    roleName: string;
+  }>;
+}
+
+const props = defineProps<{
+  open: boolean;
+  userInfo: UserInfo;
+}>();
+
+const emit = defineEmits<{
+  (e: 'update:open', value: boolean): void;
+  (e: 'cancel'): void;
+}>();
+
+const open = ref(false);
+const subordinateData = ref<SubordinateUser | null>(null);
+const loading = ref(false);
+const expandedUsers = ref(new Set<string>());
+const isFullscreen = ref(false);
+
+// 根据用户ID查询用户真实姓名
+const fetchUserRealname = async (userId: string): Promise<string> => {
+  try {
+    const res = await list({ id: userId });
+    if (res && res.records && res.records.length > 0) {
+      return res.records[0].realname || '未知用户';
+    }
+    return '未知用户';
+  } catch (error) {
+    console.error('查询用户姓名失败:', error);
+    return '未知用户';
+  }
+};
+
+// 递归处理下级用户数据，获取真实姓名
+const processSubordinateData = async (data: SubordinateUser): Promise<SubordinateUser> => {
+  // 获取当前用户的真实姓名
+  const realname = await fetchUserRealname(data.userId);
+  data.realname = realname;
+  
+  // 递归处理子级用户
+  if (data.children && data.children.length > 0) {
+    for (let i = 0; i < data.children.length; i++) {
+      data.children[i] = await processSubordinateData(data.children[i]);
+    }
+  }
+  
+  return data;
+};
+
+// 获取下级用户数据
+const fetchSubordinateData = async () => {
+  if (!props.userInfo.id) return;
+  
+  loading.value = true;
+  try {
+    const res = await getByUserSubordinate({ currentUserId: props.userInfo.id });
+    console.log('下级用户数据:', res);
+    
+    if (res) {
+      subordinateData.value = await processSubordinateData(res);
+    }
+  } catch (error) {
+    console.error('获取下级用户数据失败:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 切换下级用户展开/收起状态
+const toggleSubordinate = (userId: string) => {
+  if (expandedUsers.value.has(userId)) {
+    expandedUsers.value.delete(userId);
+  } else {
+    expandedUsers.value.add(userId);
+  }
+};
+
+// 切换全屏状态
+const toggleFullscreen = () => {
+  isFullscreen.value = !isFullscreen.value;
+};
+
+watch(() => props.open, (newVal) => {
+  open.value = newVal;
+  if (newVal && props.userInfo.id) {
+    fetchSubordinateData();
+    // 重置展开状态
+    expandedUsers.value.clear();
+  }
+});
+
+watch(open, (newVal) => {
+  emit('update:open', newVal);
+});
+
+function handleCancel() {
+  open.value = false;
+  emit('cancel');
+}
+
+function getSexText(sex?: number) {
+  if (sex === undefined || sex === null) return '-';
+  const sexMap = {
+    1: '男',
+    2: '女',
+  };
+  return sexMap[sex] || '-';
+}
+
+function getStatusText(status?: number) {
+  if (status === undefined || status === null) return '-';
+  const statusMap = {
+    1: '正常',
+    2: '冻结',
+    3: '审批中',
+  };
+  return statusMap[status] || '-';
+}
+</script>
+
+<style scoped>
+.user-info-container {
+  padding: 16px 0;
+}
+
+.role-section {
+  margin-top: 24px;
+}
+
+.role-section h4 {
+  margin-bottom: 12px;
+  color: #1890ff;
+}
+
+.subordinate-section {
+  margin-top: 24px;
+}
+
+.subordinate-section h4 {
+  margin-bottom: 12px;
+  color: #1890ff;
+}
+
+.subordinate-item {
+  margin-bottom: 16px;
+}
+
+.subordinate-card {
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+}
+
+.subordinate-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.user-basic-info {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.user-details {
+  margin-left: 12px;
+}
+
+.user-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #262626;
+  margin-bottom: 4px;
+}
+
+.user-id {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.user-stats {
+  margin: 0 20px;
+}
+
+.user-actions {
+  flex-shrink: 0;
+}
+
+.subordinate-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s;
+}
+
+/* 下级用户展开区域样式 */
+.subordinate-children {
+  margin-top: 12px;
+  margin-left: 24px;
+  padding: 0;
+  border-left: 2px solid #e8f4fd;
+  background-color: #fafafa;
+  border-radius: 0 0 8px 8px;
+}
+
+.subordinate-child-item {
+  margin-bottom: 8px;
+}
+
+.subordinate-child-card {
+  border: 1px solid #e8f4fd;
+  border-radius: 6px;
+  background-color: #ffffff;
+}
+
+.subordinate-child-card .subordinate-info {
+  padding: 12px;
+}
+
+.subordinate-child-card .user-name {
+  font-size: 14px;
+}
+
+.subordinate-child-card .user-id {
+  font-size: 11px;
+}
+
+/* 三级下级用户样式 */
+.subordinate-children .subordinate-children {
+  padding-left: 20px;
+  background-color: #f5f5f5;
+  border-left-color: #d9f7be;
+}
+
+.subordinate-children .subordinate-child-card {
+  border-color: #d9f7be;
+  background-color: #f6ffed;
+}
+
+.subordinate-children .subordinate-child-card .subordinate-info {
+  padding: 10px;
+}
+
+.subordinate-children .subordinate-child-card .user-name {
+  font-size: 13px;
+}
+
+.subordinate-children .subordinate-child-card .user-id {
+  font-size: 10px;
+}
+
+/* 全屏模式下的样式调整 */
+:deep(.ant-modal) {
+  transition: all 0.3s ease;
+}
+
+:deep(.ant-modal-content) {
+  transition: all 0.3s ease;
+}
+
+/* 确保全屏按钮显示 */
+:deep(.ant-modal-header) {
+  position: relative;
+}
+
+:deep(.ant-modal-title) {
+  display: flex !important;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-close-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.modal-action-button {
+  padding: 4px 8px !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 4px !important;
+  transition: all 0.2s ease !important;
+}
+
+.modal-action-button:hover {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  color: #1890ff !important;
+}
+
+.modal-action-button:focus {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  color: #1890ff !important;
+}
+
+.modal-action-button:active {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+}
+</style> 
