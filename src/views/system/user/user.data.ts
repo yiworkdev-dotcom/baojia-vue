@@ -37,7 +37,7 @@ export const columns: BasicColumn[] = [
     width: 140,
   },
   {
-    title: '余额',
+    title: '车数余额',
     align: 'center',
     dataIndex: 'balance',
     width: 80,
@@ -46,6 +46,13 @@ export const columns: BasicColumn[] = [
       const usedCarNum = record.usedCarNum || 0;
       return totalCarNum - usedCarNum;
     },
+  },
+  {
+    title: '账户余额',
+    align: 'center',
+    dataIndex: 'walletBalance',
+    width: 120,
+    slots: { customRender: 'walletBalance' },
   },
   {
     title: '冻结车数',

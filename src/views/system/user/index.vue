@@ -36,6 +36,14 @@
       <template #action="{ record }">
         <TableAction :actions="getTableAction(record)" :dropDownActions="getDropDownAction(record)" />
       </template>
+      <!--自定义列：账户余额-->
+      <template #bodyCell="{ column, record }">
+        <template v-if="column.dataIndex === 'walletBalance'">
+          <a @click="handleViewWalletLogs(record)" style="color: #1890ff; cursor: pointer; font-weight: bold;">
+            ¥{{ Number(record.walletBalance || 0).toFixed(2) }}
+          </a>
+        </template>
+      </template>
     </BasicTable>
     <!--用户抽屉-->
     <UserDrawer @register="registerDrawer" @success="handleSuccess" />
@@ -59,7 +67,7 @@
     <a-modal
       v-model:open="rechargeModalVisible"
       title="充值车数"
-      
+
       @ok="handleRechargeConfirm"
       @cancel="handleRechargeCancel"
     >
@@ -73,6 +81,36 @@
         />
       </div>
     </a-modal>
+    <!-- 充值余额弹窗 -->
+    <a-modal
+      v-model:open="balanceRechargeModalVisible"
+      title="充值余额"
+      @ok="handleBalanceRechargeConfirm"
+      @cancel="handleBalanceRechargeCancel"
+    >
+      <div style="padding: 20px;">
+        <a-form layout="vertical">
+          <a-form-item label="充值金额">
+            <a-input-number
+              v-model:value="balanceRechargeAmount"
+              :min="0.01"
+              :precision="2"
+              placeholder="请输入充值金额，单位：元"
+              style="width: 100%"
+            />
+          </a-form-item>
+          <a-form-item label="备注">
+            <a-input v-model:value="balanceRechargeRemark" placeholder="请输入备注" allow-clear />
+          </a-form-item>
+        </a-form>
+      </div>
+    </a-modal>
+    <!-- 钱包日志弹窗 -->
+    <UserWalletLogsModal
+      v-model:open="walletLogsModalVisible"
+      :userInfo="currentWalletUser"
+      @cancel="handleWalletLogsCancel"
+    />
   </div>
 </template>
 
@@ -87,12 +125,13 @@
   import UserQuitAgentModal from './UserQuitAgentModal.vue';
   import UserQuitModal from './UserQuitModal.vue';
   import UserSubordinateModal from './UserSubordinateModal.vue';
+  import UserWalletLogsModal from './UserWalletLogsModal.vue';
   import { useDrawer } from '/@/components/Drawer';
   import { useListPage } from '/@/hooks/system/useListPage';
   import { useModal } from '/@/components/Modal';
   import { useMessage } from '/@/hooks/web/useMessage';
   import { columns, searchFormSchema } from './user.data';
-  import { listNoCareTenant, deleteUser, batchDeleteUser, getImportUrl, getExportUrl, frozenBatch, saveOrUpdateUser } from './user.api';
+  import { listNoCareTenant, deleteUser, batchDeleteUser, getImportUrl, getExportUrl, frozenBatch, saveOrUpdateUser, rechargeUserBalance } from './user.api';
   import { getFrozenQtyByUserId, getPositionCarNumByUserId } from '/@/views/dw/order/DwProductOrder.api';
   import { usePermission } from '/@/hooks/web/usePermission';
 
@@ -116,9 +155,19 @@
   const rechargeAmount = ref(1);
   const currentRechargeRecord = ref<any>(null);
 
+  // 充值余额相关状态
+  const balanceRechargeModalVisible = ref(false);
+  const balanceRechargeAmount = ref<number | null>(null);
+  const balanceRechargeRemark = ref('后台充值');
+  const currentBalanceRechargeUser = ref<any>(null);
+
   // 查看下级相关状态
   const subordinateModalVisible = ref(false);
   const currentUserInfo = ref<any>({});
+
+  // 钱包日志弹窗相关状态
+  const walletLogsModalVisible = ref(false);
+  const currentWalletUser = ref<any>({});
 
   // 列表页面公共参数、方法
   const { prefixCls, tableContext, onExportXls, onImportXls } = useListPage({
@@ -372,6 +421,56 @@
   }
 
   /**
+   * 打开充值余额弹窗
+   */
+  function handleBalanceRecharge(record) {
+    currentBalanceRechargeUser.value = record;
+    balanceRechargeAmount.value = null;
+    balanceRechargeRemark.value = '后台充值';
+    balanceRechargeModalVisible.value = true;
+  }
+
+  /**
+   * 确认充值余额
+   */
+  async function handleBalanceRechargeConfirm() {
+    if (!currentBalanceRechargeUser.value) {
+      createMessage.error('用户信息不存在！');
+      return;
+    }
+    if (!balanceRechargeAmount.value || balanceRechargeAmount.value <= 0) {
+      createMessage.warning('请输入大于 0 的金额！');
+      return;
+    }
+    try {
+      await rechargeUserBalance({
+        userId: currentBalanceRechargeUser.value.id,
+        amount: balanceRechargeAmount.value,
+        remark: balanceRechargeRemark.value?.trim() || '',
+      });
+      createMessage.success('充值成功！');
+      balanceRechargeModalVisible.value = false;
+      balanceRechargeAmount.value = null;
+      balanceRechargeRemark.value = '后台充值';
+      currentBalanceRechargeUser.value = null;
+      reload();
+    } catch (error) {
+      console.error('充值余额失败', error);
+      createMessage.error('充值失败，请稍后重试！');
+    }
+  }
+
+  /**
+   * 取消充值余额
+   */
+  function handleBalanceRechargeCancel() {
+    balanceRechargeModalVisible.value = false;
+    balanceRechargeAmount.value = null;
+    balanceRechargeRemark.value = '后台充值';
+    currentBalanceRechargeUser.value = null;
+  }
+
+  /**
    * 打开查看下级弹窗
    */
   function handleViewSubordinate(record) {
@@ -385,6 +484,22 @@
   function handleSubordinateCancel() {
     subordinateModalVisible.value = false;
     currentUserInfo.value = {};
+  }
+
+  /**
+   * 打开钱包日志弹窗
+   */
+  function handleViewWalletLogs(record) {
+    currentWalletUser.value = record;
+    walletLogsModalVisible.value = true;
+  }
+
+  /**
+   * 取消查看钱包日志
+   */
+  function handleWalletLogsCancel() {
+    walletLogsModalVisible.value = false;
+    currentWalletUser.value = {};
   }
 
   /**
@@ -408,9 +523,14 @@
         color: 'success',
       },
       {
-        label: '查看下级',
-        onClick: handleViewSubordinate.bind(null, record),
+        label: '充值余额',
+        onClick: handleBalanceRecharge.bind(null, record),
+        color: 'warning',
       },
+      // {
+      //   label: '查看下级',
+      //   onClick: handleViewSubordinate.bind(null, record),
+      // },
       {
         label: '编辑',
         onClick: handleEdit.bind(null, record),

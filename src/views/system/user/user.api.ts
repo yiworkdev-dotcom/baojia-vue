@@ -8,6 +8,7 @@ enum Api {
   list = '/sys/user/list',
   save = '/sys/user/add',
   edit = '/sys/user/edit',
+  rechargeBalance = '/sys/user/rechargeBalance',
   agentSave = '/sys/sysUserAgent/add',
   agentEdit = '/sys/sysUserAgent/edit',
   deleteAgent = '/sys/sysUserAgent/delete',
@@ -117,6 +118,13 @@ export const batchDeleteUser = (params, handleSuccess) => {
 export const saveOrUpdateUser = (params, isUpdate) => {
   let url = isUpdate ? Api.edit : Api.save;
   return defHttp.post({ url: url, params });
+};
+
+/**
+ * 余额充值
+ */
+export const rechargeUserBalance = (params) => {
+  return defHttp.post({ url: Api.rechargeBalance, params });
 };
 /**
  * 唯一校验
