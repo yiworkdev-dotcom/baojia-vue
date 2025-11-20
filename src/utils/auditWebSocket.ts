@@ -255,7 +255,7 @@ class AuditWebSocketManager {
   
     try {
       const scheme = (typeof window !== 'undefined' && window.location && window.location.protocol === 'https:') ? 'wss' : 'ws';
-      const wsUrl = `${scheme}://localhost:8080jeecg-boot/ws/auditNotice?X-Access-Token=${token}`;
+      const wsUrl = `${scheme}://localhost:8080/jeecg-boot/ws/auditNotice?X-Access-Token=${token}`;
       this.ws = new WebSocket(wsUrl);
       
       this.ws.onopen = () => {

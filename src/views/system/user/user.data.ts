@@ -7,14 +7,15 @@ import { useUserStore } from '/@/store/modules/user';
 const userStore = useUserStore();
 export const columns: BasicColumn[] = [
   {
-    title: '用户账号',
-    dataIndex: 'username',
-    width: 120,
-  },
-  {
     title: '用户姓名',
     dataIndex: 'realname',
     width: 100,
+    fixed: 'left',
+  },
+  {
+    title: '用户账号',
+    dataIndex: 'username',
+    width: 120,
   },
   {
     title: '头像',
@@ -22,15 +23,15 @@ export const columns: BasicColumn[] = [
     width: 80,
     customRender: render.renderAvatar,
   },
-  {
-    title: '性别',
-    dataIndex: 'sex',
-    width: 80,
-    sorter: true,
-    customRender: ({ text }) => {
-      return render.renderDict(text, 'sex');
-    },
-  },
+  // {
+  //   title: '性别',
+  //   dataIndex: 'sex',
+  //   width: 80,
+  //   sorter: true,
+  //   customRender: ({ text }) => {
+  //     return render.renderDict(text, 'sex');
+  //   },
+  // },
   {
     title: '手机号',
     dataIndex: 'phone',
@@ -67,6 +68,24 @@ export const columns: BasicColumn[] = [
     width: 80,
   },
   {
+    title: '免手续费券',
+    align: 'center',
+    dataIndex: 'feeVouchers',
+    width: 100,
+    customRender: ({ record }) => {
+      return record.feeVouchers || 0;
+    },
+  },
+  {
+    title: '积分',
+    align: 'center',
+    dataIndex: 'points',
+    width: 80,
+    customRender: ({ record }) => {
+      return record.points || 0;
+    },
+  },
+  {
     title: '推荐码',
     align: 'center',
     dataIndex: 'recommendCode',
@@ -85,6 +104,54 @@ export const columns: BasicColumn[] = [
     width: 70,
     customRender: ({ record }) => {
       return record && record.recommendCode ? render.renderTag('VIP', 'gold') : '';
+    },
+  },
+  {
+    title: '交易目标周期',
+    align: 'center',
+    dataIndex: 'tradeGoalCycle',
+    width: 180,
+    customRender: ({ record }) => {
+      if (!record.tradeGoal) return '-';
+      // 检查是否进入考核期
+      if (!record.tradeGoal.inAssessment) {
+        return render.renderTag('未进入考核期', 'default');
+      }
+      const start = record.tradeGoal.cycleStartTime ? record.tradeGoal.cycleStartTime.substring(0, 10) : '';
+      const end = record.tradeGoal.cycleEndTime ? record.tradeGoal.cycleEndTime.substring(0, 10) : '';
+      return start && end ? `${start} ~ ${end}` : '-';
+    },
+  },
+  {
+    title: '交易完成度',
+    align: 'center',
+    dataIndex: 'tradeGoalProgress',
+    width: 120,
+    customRender: ({ record }) => {
+      if (!record.tradeGoal) return '-';
+      // 检查是否进入考核期
+      if (!record.tradeGoal.inAssessment) {
+        return '-';
+      }
+      const completed = record.tradeGoal.completedCount || 0;
+      const target = record.tradeGoal.targetCount || 3;
+      const rate = record.tradeGoal.completionRate || 0;
+      return `${completed}/${target} (${rate}%)`;
+    },
+  },
+  {
+    title: '目标状态',
+    align: 'center',
+    dataIndex: 'tradeGoalStatus',
+    width: 100,
+    customRender: ({ record }) => {
+      if (!record.tradeGoal) return '-';
+      // 检查是否进入考核期
+      if (!record.tradeGoal.inAssessment) {
+        return render.renderTag('未考核', 'default');
+      }
+      const isCompleted = record.tradeGoal.isCompleted;
+      return isCompleted ? render.renderTag('已完成', 'success') : render.renderTag('进行中', 'processing');
     },
   },
   {

@@ -9,6 +9,8 @@ enum Api {
   save = '/sys/user/add',
   edit = '/sys/user/edit',
   rechargeBalance = '/sys/user/rechargeBalance',
+  rechargeFeeVouchers = '/sys/user/rechargeFeeVouchers',
+  rechargePoints = '/sys/user/rechargePoints',
   agentSave = '/sys/sysUserAgent/add',
   agentEdit = '/sys/sysUserAgent/edit',
   deleteAgent = '/sys/sysUserAgent/delete',
@@ -125,6 +127,20 @@ export const saveOrUpdateUser = (params, isUpdate) => {
  */
 export const rechargeUserBalance = (params) => {
   return defHttp.post({ url: Api.rechargeBalance, params });
+};
+
+/**
+ * 充值免手续费券
+ */
+export const rechargeFeeVouchers = (params) => {
+  return defHttp.post({ url: Api.rechargeFeeVouchers, params });
+};
+
+/**
+ * 充值积分
+ */
+export const rechargePoints = (params) => {
+  return defHttp.post({ url: Api.rechargePoints, params });
 };
 /**
  * 唯一校验

@@ -86,7 +86,7 @@
       fetchMainProductPriceData();
       
       // 建立WebSocket连接
-      ws = new WebSocket('ws://localhost:8080jeecg-boot/ws/mains');
+      ws = new WebSocket('ws://localhost:8080/jeecg-boot/ws/mains');
       
       ws.onopen = () => {
         };

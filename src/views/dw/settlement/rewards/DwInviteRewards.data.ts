@@ -43,10 +43,51 @@ export const columns: BasicColumn[] = [
     }
    },
    {
+    title: '结算月份',
+    align:"center",
+    dataIndex: 'settlementMonth',
+    width: 100
+   },
+   {
+    title: '交易单数',
+    align:"center",
+    dataIndex: 'tradeCount',
+    width: 100
+   },
+   {
+    title: '原始金额',
+    align:"center",
+    dataIndex: 'originalAmount',
+    width: 120,
+    customRender: ({ text }) => {
+      return text ? `¥${Number(text).toFixed(2)}` : '-';
+    }
+   },
+   {
+    title: '是否减半',
+    align:"center",
+    dataIndex: 'isHalved',
+    width: 100,
+    customRender: ({ text }) => {
+      if (text === 1) {
+        return render.renderTag('是', 'warning');
+      } else if (text === 0) {
+        return render.renderTag('否', 'success');
+      }
+      return '-';
+    }
+   },
+   {
+    title: '减半原因',
+    align:"center",
+    dataIndex: 'halvedReason',
+    width: 200
+   },
+   {
     title: '备注',
     align:"center",
     dataIndex: 'remark',
-    width: 200
+    width: 250
    },
    {
     title: '发放时间',
@@ -74,6 +115,28 @@ export const searchFormSchema: FormSchema[] = [
         { label: '直推奖励', value: 1 },
         { label: '级差奖励', value: 2 },
         { label: '后台充值', value: 3 }
+      ]
+    },
+  },
+  {
+    label: '结算月份',
+    field: 'settlementMonth',
+    component: 'MonthPicker',
+    componentProps: {
+      placeholder: '请选择结算月份',
+      valueFormat: 'YYYY-MM'
+    },
+  },
+  {
+    label: '是否减半',
+    field: 'isHalved',
+    component: 'JDictSelectTag',
+    componentProps: {
+      dictCode: '',
+      placeholder: '请选择',
+      options: [
+        { label: '是', value: 1 },
+        { label: '否', value: 0 }
       ]
     },
   },

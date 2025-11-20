@@ -57,12 +57,6 @@
     <UserQuitAgentModal @register="registerQuitAgentModal" @success="reload" />
     <!-- 离职人员列弹窗 -->
     <UserQuitModal @register="registerQuitModal" @success="reload" />
-    <!-- 查看下级弹窗 -->
-    <UserSubordinateModal 
-      v-model:open="subordinateModalVisible" 
-      :userInfo="currentUserInfo"
-      @cancel="handleSubordinateCancel"
-    />
     <!-- 充值车数弹窗 -->
     <a-modal
       v-model:open="rechargeModalVisible"
@@ -105,6 +99,40 @@
         </a-form>
       </div>
     </a-modal>
+    <!-- 充值免手续费券弹窗 -->
+    <a-modal
+      v-model:open="feeVouchersModalVisible"
+      title="充值免手续费券"
+      @ok="handleFeeVouchersConfirm"
+      @cancel="handleFeeVouchersCancel"
+    >
+      <div style="padding: 20px;">
+        <p>请输入免手续费券变化量（正数为增加，负数为扣减）：</p>
+        <a-input-number
+          v-model:value="feeVouchersAmount"
+          :precision="0"
+          placeholder="请输入数量，如：10（增加）或 -5（扣减）"
+          style="width: 100%"
+        />
+      </div>
+    </a-modal>
+    <!-- 充值积分弹窗 -->
+    <a-modal
+      v-model:open="pointsModalVisible"
+      title="充值积分"
+      @ok="handlePointsConfirm"
+      @cancel="handlePointsCancel"
+    >
+      <div style="padding: 20px;">
+        <p>请输入积分变化量（正数为增加，负数为扣减）：</p>
+        <a-input-number
+          v-model:value="pointsAmount"
+          :precision="0"
+          placeholder="请输入数量，如：100（增加）或 -50（扣减）"
+          style="width: 100%"
+        />
+      </div>
+    </a-modal>
     <!-- 钱包日志弹窗 -->
     <UserWalletLogsModal
       v-model:open="walletLogsModalVisible"
@@ -124,15 +152,16 @@
   import UserAgentModal from './UserAgentModal.vue';
   import UserQuitAgentModal from './UserQuitAgentModal.vue';
   import UserQuitModal from './UserQuitModal.vue';
-  import UserSubordinateModal from './UserSubordinateModal.vue';
   import UserWalletLogsModal from './UserWalletLogsModal.vue';
   import { useDrawer } from '/@/components/Drawer';
   import { useListPage } from '/@/hooks/system/useListPage';
   import { useModal } from '/@/components/Modal';
   import { useMessage } from '/@/hooks/web/useMessage';
   import { columns, searchFormSchema } from './user.data';
-  import { listNoCareTenant, deleteUser, batchDeleteUser, getImportUrl, getExportUrl, frozenBatch, saveOrUpdateUser, rechargeUserBalance } from './user.api';
+  import { listNoCareTenant, deleteUser, batchDeleteUser, getImportUrl, getExportUrl, frozenBatch, saveOrUpdateUser, rechargeUserBalance, rechargeFeeVouchers, rechargePoints } from './user.api';
   import { getFrozenQtyByUserId, getPositionCarNumByUserId } from '/@/views/dw/order/DwProductOrder.api';
+  import { getAllUsersTradeGoals } from '/@/views/dw/close/TradeGoal.api';
+  import { calculateDirectRewardByCycle } from '/@/views/dw/settlement/Reward.api';
   import { usePermission } from '/@/hooks/web/usePermission';
 
   const { createMessage, createConfirm } = useMessage();
@@ -161,13 +190,19 @@
   const balanceRechargeRemark = ref('后台充值');
   const currentBalanceRechargeUser = ref<any>(null);
 
-  // 查看下级相关状态
-  const subordinateModalVisible = ref(false);
-  const currentUserInfo = ref<any>({});
-
   // 钱包日志弹窗相关状态
   const walletLogsModalVisible = ref(false);
   const currentWalletUser = ref<any>({});
+
+  // 充值免手续费券相关状态
+  const feeVouchersModalVisible = ref(false);
+  const feeVouchersAmount = ref<number | null>(null);
+  const currentFeeVouchersUser = ref<any>(null);
+
+  // 充值积分相关状态
+  const pointsModalVisible = ref(false);
+  const pointsAmount = ref<number | null>(null);
+  const currentPointsUser = ref<any>(null);
 
   // 列表页面公共参数、方法
   const { prefixCls, tableContext, onExportXls, onImportXls } = useListPage({
@@ -177,65 +212,62 @@
       api: listNoCareTenant,
       columns: columns,
       size: 'small',
+      childrenColumnName: 'children_disabled', // 禁用树形结构，避免显示+号
       formConfig: {
         // labelWidth: 200,
         schemas: searchFormSchema,
       },
       actionColumn: {
-        width: 250,
+        width: 380,
       },
       beforeFetch: (params) => {
         return Object.assign({ column: 'createTime', order: 'desc' }, params);
       },
       afterFetch: async (result) => {
         console.log('afterFetch 被调用了！', result);
-        // 在获取用户数据后，计算每个用户的冻结车数和持仓车数
+        // 在获取用户数据后，计算每个用户的交易目标完成度
+        // 注意：冻结车数和持仓车数已经在后端返回了，不需要再次请求
         if (result) {
           try {
-            console.log('开始获取冻结车数和持仓车数...');
-            
-            // 为每个用户获取冻结车数和持仓车数
-            const dataPromises = result.map(async (user) => {
-              try {
-                // 并行获取冻结车数和持仓车数
-                const [frozenResponse, positionResponse] = await Promise.all([
-                  getFrozenQtyByUserId(user.id),
-                  getPositionCarNumByUserId(user.id)
-                ]);
-                
-                // 从响应中获取数据
-                const frozenQty = frozenResponse || 0;
-                const positionCarNum = positionResponse || 0;
-                
-                console.log(`用户 ${user.realname} (${user.id}) 冻结车数: ${frozenQty}, 持仓车数: ${positionCarNum}`);
-                
-                // 设置用户数据
-                user.frozenQty = frozenQty;
-                user.positionCarNum = positionCarNum;
-                
-                return { userId: user.id, frozenQty, positionCarNum };
-              } catch (error) {
-                console.error(`获取用户 ${user.id} 数据失败:`, error);
-                user.frozenQty = 0;
-                user.positionCarNum = 0;
-                return { userId: user.id, frozenQty: 0, positionCarNum: 0 };
+            console.log('开始获取交易目标完成度...');
+
+            // 获取所有用户的交易目标完成度
+            let tradeGoalsMap = {};
+            try {
+              const tradeGoalsResponse = await getAllUsersTradeGoals();
+              if (tradeGoalsResponse && Array.isArray(tradeGoalsResponse)) {
+                // 将交易目标数据转换为Map,方便查找
+                tradeGoalsMap = tradeGoalsResponse.reduce((map, goal) => {
+                  map[goal.userId] = goal;
+                  return map;
+                }, {});
+                console.log('交易目标完成度获取成功,共', tradeGoalsResponse.length, '条数据');
               }
+            } catch (error) {
+              console.error('获取交易目标完成度失败:', error);
+            }
+
+            // 设置交易目标数据，冻结车数和持仓车数已经从后端返回
+            result.forEach(user => {
+              // 确保后端返回的数据有默认值
+              user.frozenQty = user.frozenQty || 0;
+              user.positionCarNum = user.positionCarNum || 0;
+              user.tradeGoal = tradeGoalsMap[user.id] || null;
             });
-            
-            // 等待所有请求完成
-            await Promise.all(dataPromises);
-            console.log('所有用户的冻结车数和持仓车数获取完成');
-            
+
+            console.log('所有用户的交易目标完成度设置完成');
+
           } catch (error) {
             console.error('获取用户数据失败:', error);
             // 如果获取失败，设置默认值
             result.forEach(user => {
               user.frozenQty = user.frozenQty || 0;
               user.positionCarNum = user.positionCarNum || 0;
+              user.tradeGoal = user.tradeGoal || null;
             });
           }
         }
-        
+
         return result;
       },
     },
@@ -471,22 +503,6 @@
   }
 
   /**
-   * 打开查看下级弹窗
-   */
-  function handleViewSubordinate(record) {
-    currentUserInfo.value = record;
-    subordinateModalVisible.value = true;
-  }
-
-  /**
-   * 取消查看下级
-   */
-  function handleSubordinateCancel() {
-    subordinateModalVisible.value = false;
-    currentUserInfo.value = {};
-  }
-
-  /**
    * 打开钱包日志弹窗
    */
   function handleViewWalletLogs(record) {
@@ -500,6 +516,128 @@
   function handleWalletLogsCancel() {
     walletLogsModalVisible.value = false;
     currentWalletUser.value = {};
+  }
+
+  /**
+   * 打开充值免手续费券弹窗
+   */
+  function handleFeeVouchers(record) {
+    currentFeeVouchersUser.value = record;
+    feeVouchersAmount.value = null;
+    feeVouchersModalVisible.value = true;
+  }
+
+  /**
+   * 确认充值免手续费券
+   */
+  async function handleFeeVouchersConfirm() {
+    if (!currentFeeVouchersUser.value) {
+      createMessage.error('用户信息不存在！');
+      return;
+    }
+    if (feeVouchersAmount.value === null || feeVouchersAmount.value === 0) {
+      createMessage.warning('请输入有效的数量！');
+      return;
+    }
+    try {
+      await rechargeFeeVouchers({
+        userId: currentFeeVouchersUser.value.id,
+        amount: feeVouchersAmount.value,
+      });
+      const operationText = feeVouchersAmount.value > 0 ? '充值' : '扣减';
+      createMessage.success(`${operationText}成功！`);
+      feeVouchersModalVisible.value = false;
+      feeVouchersAmount.value = null;
+      currentFeeVouchersUser.value = null;
+      reload();
+    } catch (error) {
+      console.error('充值免手续费券失败', error);
+      createMessage.error('操作失败，请稍后重试！');
+    }
+  }
+
+  /**
+   * 取消充值免手续费券
+   */
+  function handleFeeVouchersCancel() {
+    feeVouchersModalVisible.value = false;
+    feeVouchersAmount.value = null;
+    currentFeeVouchersUser.value = null;
+  }
+
+  /**
+   * 打开充值积分弹窗
+   */
+  function handlePoints(record) {
+    currentPointsUser.value = record;
+    pointsAmount.value = null;
+    pointsModalVisible.value = true;
+  }
+
+  /**
+   * 确认充值积分
+   */
+  async function handlePointsConfirm() {
+    if (!currentPointsUser.value) {
+      createMessage.error('用户信息不存在！');
+      return;
+    }
+    if (pointsAmount.value === null || pointsAmount.value === 0) {
+      createMessage.warning('请输入有效的数量！');
+      return;
+    }
+    try {
+      await rechargePoints({
+        userId: currentPointsUser.value.id,
+        amount: pointsAmount.value,
+      });
+      const operationText = pointsAmount.value > 0 ? '充值' : '扣减';
+      createMessage.success(`${operationText}成功！`);
+      pointsModalVisible.value = false;
+      pointsAmount.value = null;
+      currentPointsUser.value = null;
+      reload();
+    } catch (error) {
+      console.error('充值积分失败', error);
+      createMessage.error('操作失败，请稍后重试！');
+    }
+  }
+
+  /**
+   * 取消充值积分
+   */
+  function handlePointsCancel() {
+    pointsModalVisible.value = false;
+    pointsAmount.value = null;
+    currentPointsUser.value = null;
+  }
+
+  /**
+   * 为指定用户结算直推奖励（按考核期结算当前考核期）
+   */
+  async function handleCalculateRewardForUser(record) {
+    createConfirm({
+      iconType: 'warning',
+      title: '确认结算',
+      content: `确定要为用户「${record.realname}」结算当前考核期的直推奖励吗？\n将结算该用户当前正在进行的考核期，历史考核期由后台自动结算。`,
+      onOk: async () => {
+        try {
+          const loadingMsg = createMessage.loading({ content: '正在结算直推奖励，请稍候...', duration: 0 });
+          // 不传 cycleNumber 参数，结算当前考核期
+          const res = await calculateDirectRewardByCycle(record.id);
+          loadingMsg();
+          if (res.success !== false) {
+            createMessage.success(res.message || res || '直推奖励结算完成');
+            reload();
+          } else {
+            createMessage.error(res.message || '结算失败');
+          }
+        } catch (error) {
+          console.error('结算直推奖励失败:', error);
+          createMessage.error('结算失败: ' + (error.message || '未知错误'));
+        }
+      },
+    });
   }
 
   /**
@@ -527,10 +665,16 @@
         onClick: handleBalanceRecharge.bind(null, record),
         color: 'warning',
       },
-      // {
-      //   label: '查看下级',
-      //   onClick: handleViewSubordinate.bind(null, record),
-      // },
+      {
+        label: '充值手续费券',
+        onClick: handleFeeVouchers.bind(null, record),
+        color: 'success',
+      },
+      {
+        label: '充值积分',
+        onClick: handlePoints.bind(null, record),
+        color: 'success',
+      },
       {
         label: '编辑',
         onClick: handleEdit.bind(null, record),
@@ -574,6 +718,11 @@
           title: '确定解冻吗?',
           confirm: handleFrozen.bind(null, record, 1),
         },
+      },
+      {
+        label: '结算直推奖励',
+        onClick: handleCalculateRewardForUser.bind(null, record),
+        color: 'success',
       },
       // {
       //   label: '代理人',

@@ -36,7 +36,7 @@ class WebSocketManager {
     this.isInitialized = true;
   
     try {
-      const wsUrl = `ws://localhost:8080jeecg-boot/ws/chat?X-Access-Token=${token}`;
+      const wsUrl = `ws://localhost:8080/jeecg-boot/ws/chat?X-Access-Token=${token}`;
       
       this.ws = new WebSocket(wsUrl);
       
